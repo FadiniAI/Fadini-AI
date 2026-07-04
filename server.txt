@@ -1,0 +1,125 @@
+require("dotenv").config();
+
+const express = require("express");
+const cors = require("cors");
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
+
+app.use(cors());
+app.use(express.json());
+app.use(express.static("public"));
+
+let decisoes = [];
+
+const produtosSimulados = [
+  { id: 1, nome: "Carregador Turbo USB-C 20W", categoria: "Eletrônicos", custo: 38, frete: 8, venda: 79.90, taxa: 16 },
+  { id: 2, nome: "Mouse Sem Fio Recarregável", categoria: "Informática", custo: 34, frete: 8, venda: 74.90, taxa: 16 },
+  { id: 3, nome: "Suporte Veicular Magnético", categoria: "Acessórios", custo: 24, frete: 7, venda: 59.90, taxa: 16 }
+];
+
+function analisarProduto(produto) {
+  const taxaValor = produto.venda * (produto.taxa / 100);
+  const custoTotal = produto.custo + produto.frete + taxaValor;
+  const lucro = produto.venda - custoTotal;
+  const margem = produto.venda > 0 ? (lucro / produto.venda) * 100 : 0;
+
+  return {
+    ...produto,
+    taxaValor,
+    custoTotal,
+    lucro,
+    margem,
+    recomendado: lucro >= 20 && margem >= 25
+  };
+}
+
+app.get("/api/status", (req, res) => {
+  res.json({
+    projeto: "Fadini AI",
+    versao: "1.0",
+    baseUrl: BASE_URL,
+    mercadoLivreCallback: `${BASE_URL}/auth/mercadolivre/callback`,
+    mercadoLivreConfigurado: Boolean(process.env.MERCADO_LIVRE_CLIENT_ID && process.env.MERCADO_LIVRE_CLIENT_SECRET)
+  });
+});
+
+app.get("/api/oportunidades", (req, res) => {
+  const oportunidades = produtosSimulados
+    .map(analisarProduto)
+    .filter((p) => p.recomendado)
+    .sort((a, b) => b.lucro - a.lucro);
+
+  res.json(oportunidades);
+});
+
+app.post("/api/decisao", (req, res) => {
+  const { produtoId, decisao } = req.body;
+  const produto = produtosSimulados.find((p) => p.id === Number(produtoId));
+
+  if (!produto) {
+    return res.status(404).json({ erro: "Produto não encontrado." });
+  }
+
+  const registro = {
+    id: decisoes.length + 1,
+    data: new Date().toISOString(),
+    decisao,
+    produto: analisarProduto(produto)
+  };
+
+  decisoes.unshift(registro);
+  res.json({ ok: true, registro });
+});
+
+app.get("/api/decisoes", (req, res) => {
+  res.json(decisoes);
+});
+
+app.get("/auth/mercadolivre", (req, res) => {
+  const clientId = process.env.MERCADO_LIVRE_CLIENT_ID;
+  const redirectUri = `${BASE_URL}/auth/mercadolivre/callback`;
+
+  if (!clientId || clientId.includes("coloque")) {
+    return res.status(400).send(`
+      <h1>Fadini AI</h1>
+      <p>Mercado Livre ainda não configurado.</p>
+      <p>Callback para cadastrar no Mercado Livre:</p>
+      <code>${redirectUri}</code>
+    `);
+  }
+
+  const url = new URL("https://auth.mercadolivre.com.br/authorization");
+  url.searchParams.set("response_type", "code");
+  url.searchParams.set("client_id", clientId);
+  url.searchParams.set("redirect_uri", redirectUri);
+
+  res.redirect(url.toString());
+});
+
+app.get("/auth/mercadolivre/callback", (req, res) => {
+  const { code } = req.query;
+
+  if (!code) {
+    return res.send(`
+      <h1>Fadini AI - Callback Mercado Livre</h1>
+      <p>Esta URL está funcionando corretamente.</p>
+      <p>Use esta URI no Mercado Livre Developers:</p>
+      <code>${BASE_URL}/auth/mercadolivre/callback</code>
+    `);
+  }
+
+  res.send(`
+    <h1>Fadini AI recebeu autorização do Mercado Livre</h1>
+    <p>Recebemos um código de autorização. Próxima etapa: trocar esse código por um token com segurança no servidor.</p>
+  `);
+});
+
+app.get("*", (req, res) => {
+  res.sendFile(__dirname + "/public/index.html");
+});
+
+app.listen(PORT, () => {
+  console.log(`Fadini AI rodando em ${BASE_URL}`);
+});

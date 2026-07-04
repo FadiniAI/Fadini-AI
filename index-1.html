@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Fadini AI</title>
+  <style>
+    body { margin:0; font-family:Arial,sans-serif; background:#eef2f7; color:#111827; }
+    header { background:#0f172a; color:white; padding:22px; text-align:center; }
+    main { max-width:850px; margin:18px auto; padding:0 14px 50px; }
+    .card { background:white; border-radius:18px; padding:18px; margin-bottom:16px; box-shadow:0 4px 14px rgba(0,0,0,.08); }
+    button { width:100%; border:0; border-radius:14px; padding:15px; margin:8px 0; font-weight:bold; font-size:16px; cursor:pointer; }
+    .primary { background:#2563eb; color:white; }
+    .green { background:#16a34a; color:white; }
+    .red { background:#dc2626; color:white; }
+    .dark { background:#111827; color:white; }
+    .item { background:#f8fafc; border:1px solid #e5e7eb; border-radius:14px; padding:14px; margin-top:12px; }
+    .good { border-left:6px solid #16a34a; }
+    .money { font-size:19px; font-weight:bold; }
+    code { display:block; white-space:normal; word-break:break-all; background:#e5e7eb; padding:10px; border-radius:10px; }
+  </style>
+</head>
+<body>
+<header>
+  <h1>Fadini AI</h1>
+  <p>Servidor real inicial</p>
+</header>
+
+<main>
+  <section class="card">
+    <h2>Status do sistema</h2>
+    <button class="primary" onclick="carregarStatus()">Ver status</button>
+    <div id="status"></div>
+  </section>
+
+  <section class="card">
+    <h2>Mercado Livre</h2>
+    <button class="dark" onclick="location.href='/auth/mercadolivre'">Conectar Mercado Livre</button>
+  </section>
+
+  <section class="card">
+    <h2>Oportunidades</h2>
+    <button class="primary" onclick="buscarOportunidades()">Colocar para derreter</button>
+    <div id="oportunidades"></div>
+  </section>
+
+  <section class="card">
+    <h2>Decisões</h2>
+    <button class="primary" onclick="carregarDecisoes()">Atualizar histórico</button>
+    <div id="decisoes"></div>
+  </section>
+</main>
+
+<script>
+function brl(v){ return v.toLocaleString("pt-BR",{style:"currency",currency:"BRL"}); }
+
+async function carregarStatus(){
+  const r = await fetch("/api/status");
+  const s = await r.json();
+  document.getElementById("status").innerHTML = `
+    <div class="item">
+      Projeto: ${s.projeto}<br>
+      Versão: ${s.versao}<br>
+      Mercado Livre configurado: ${s.mercadoLivreConfigurado ? "sim" : "não"}<br><br>
+      URI de redirect:
+      <code>${s.mercadoLivreCallback}</code>
+    </div>`;
+}
+
+async function buscarOportunidades(){
+  const r = await fetch("/api/oportunidades");
+  const lista = await r.json();
+
+  document.getElementById("oportunidades").innerHTML = lista.map(p => `
+    <div class="item good">
+      <h3>${p.nome}</h3>
+      Categoria: ${p.categoria}<br>
+      Preço sugerido: ${brl(p.venda)}<br>
+      Custo total: ${brl(p.custoTotal)}<br>
+      <p class="money">Lucro: ${brl(p.lucro)} | Margem: ${p.margem.toFixed(2)}%</p>
+      <button class="green" onclick="decidir(${p.id}, 'aprovar')">✅ Aprovar</button>
+      <button class="red" onclick="decidir(${p.id}, 'rejeitar')">❌ Rejeitar</button>
+    </div>
+  `).join("") || "<p>Nenhuma oportunidade encontrada.</p>";
+}
+
+async function decidir(produtoId, decisao){
+  await fetch("/api/decisao", {
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({produtoId, decisao})
+  });
+  carregarDecisoes();
+}
+
+async function carregarDecisoes(){
+  const r = await fetch("/api/decisoes");
+  const lista = await r.json();
+
+  document.getElementById("decisoes").innerHTML = lista.map(d => `
+    <div class="item">
+      <strong>${d.produto.nome}</strong><br>
+      Decisão: ${d.decisao}<br>
+      Lucro: ${brl(d.produto.lucro)} | Margem: ${d.produto.margem.toFixed(2)}%
+    </div>
+  `).join("") || "<p>Nenhuma decisão ainda.</p>";
+}
+
+carregarStatus();
+</script>
+</body>
+</html>
